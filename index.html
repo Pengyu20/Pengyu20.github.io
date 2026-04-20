@@ -28,10 +28,11 @@
       faceAttributeValue,
       errorCategories
     } from '@nuralogix.ai/anura-web-core-sdk';
-    import helpers from '@nuralogix.ai/anura-web-core-sdk/helpers';
+    import helpers, { CameraControllerEvents } from '@nuralogix.ai/anura-web-core-sdk/helpers';
     import { AnuraMask } from '@nuralogix.ai/anura-web-core-sdk/masks/anura';
 
     const { CameraController } = helpers;
+    const { CAMERA_STATUS } = CameraControllerEvents;
 
     const getConfig = () => {
       const params = new URLSearchParams(window.location.search);
@@ -128,15 +129,16 @@
         postToMiniProgram({ type: 'ANURA_ERROR', category, message, data });
       };
 
-      camera.addEventListener('CAMERA_STATUS', async (e) => {debug('camera status event', e && e.detail);
-        if (e && e.detail && e.detail.isOpen && camera.cameraStream) {
-          await measurement.setMediaStream(camera.cameraStream);
-          const ok = measurement.setObjectFit(mask.objectFit);
-          if (ok) {
-            measurement.loadMask(mask.getSvg());
-          }
-        }
-      });
+      camera.addEventListener(CAMERA_STATUS, async (e) => {
+  debug('camera status event', e && e.detail);
+  if (e && e.detail && e.detail.isOpen && camera.cameraStream) {
+    await measurement.setMediaStream(camera.cameraStream);
+    const ok = measurement.setObjectFit(mask.objectFit);
+    if (ok) {
+      measurement.loadMask(mask.getSvg());
+    }
+  }
+});
 
       const granted = await camera.requestPermission();debug('camera permission result', granted);
       if (!granted) {
