@@ -93,6 +93,7 @@
         topMargin: 0.06,
         bottomMargin: 0.02
       });
+      let cameraStarted = false;
 
       const demographics = cfg.demographics || {};
       const sdkDemographics = {
@@ -109,13 +110,33 @@
       await measurement.setDemographics(sdkDemographics);debug('demographics set ok', sdkDemographics);
 
       measurement.on.faceTrackerStateChanged = async (state) => {
-        postToMiniProgram({ type: 'ANURA_STATUS', status: state });
-        if (state === faceTrackerState.READY) {
-          await measurement.setConstraintsConfig(true);
-          await measurement.startTracking();
-          await measurement.startMeasurement(false);
-        }
-      };
+  debug('faceTrackerState', state);
+  postToMiniProgram({ type: 'ANURA_STATUS', status: state });
+
+  if (state === faceTrackerState.LOADED && !cameraStarted) {
+    await camera.list();
+    const started = await camera.start(1280, 720);
+    cameraStarted = started;
+    debug('camera.start after LOADED', started);
+  }
+
+  if (state === faceTrackerState.READY && camera.cameraStream) {
+    await measurement.setMediaStream(camera.cameraStream);
+    debug('after setMediaStream at READY');
+
+    const ok = measurement.setObjectFit(mask.objectFit);
+    debug('setObjectFit at READY', ok);
+
+    if (ok) {
+      measurement.loadMask(mask.getSvg());
+      debug('loadMask called at READY');
+    }
+
+    await measurement.setConstraintsConfig(true);
+    await measurement.startTracking();
+    await measurement.startMeasurement(false);
+  }
+};
 
       measurement.on.resultsReceived = (results) => {
         postToMiniProgram({ type: 'ANURA_RESULTS', results });
@@ -153,9 +174,6 @@
         postToMiniProgram({ type: 'ANURA_ERROR', message: 'Camera permission denied' });
         return;
       }
-      await camera.list();
-      const started = await camera.start(1280, 720);
-debug('camera.start result', started);
     };
 
     main().catch((err) => {
