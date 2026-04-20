@@ -50,6 +50,10 @@
       }
     };
 
+    const debug = (...args) => {
+  console.log('[ANURA_BRIDGE]', ...args);
+};
+
     const normalizeEnum = (key, value) => {
       if (!value) return undefined;
       return faceAttributeValue[value];
@@ -156,9 +160,6 @@ debug('camera.start result', started);
     type: 'ANURA_ERROR',
     message: err && err.message ? err.message : 'SDK init failed'
   });
-      const debug = (...args) => {
-  console.log('[ANURA_BRIDGE]', ...args);
-};
 });
   </script>
 </body>
