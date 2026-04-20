@@ -131,11 +131,19 @@
 
       camera.addEventListener(CAMERA_STATUS, async (e) => {
   debug('camera status event', e && e.detail);
+  debug('camera stream exists', !!camera.cameraStream);
+
   if (e && e.detail && e.detail.isOpen && camera.cameraStream) {
+    debug('before setMediaStream');
     await measurement.setMediaStream(camera.cameraStream);
+    debug('after setMediaStream');
+
     const ok = measurement.setObjectFit(mask.objectFit);
+    debug('setObjectFit result', ok);
+
     if (ok) {
       measurement.loadMask(mask.getSvg());
+      debug('loadMask called');
     }
   }
 });
