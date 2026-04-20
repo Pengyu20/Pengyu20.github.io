@@ -144,8 +144,18 @@
     };
 
     main().catch((err) => {
-      postToMiniProgram({ type: 'ANURA_ERROR', message: err && err.message ? err.message : 'SDK init failed' });
-    });
+  console.error('ANURA_BRIDGE_ERROR', err);
+  document.body.insertAdjacentHTML(
+    'beforeend',
+    '<pre style="position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#7f1d1d;color:#fff;padding:12px;font-size:12px;white-space:pre-wrap;">' +
+      String(err && err.stack ? err.stack : err && err.message ? err.message : 'SDK init failed') +
+    '</pre>'
+  );
+  postToMiniProgram({
+    type: 'ANURA_ERROR',
+    message: err && err.message ? err.message : 'SDK init failed'
+  });
+});
   </script>
 </body>
 </html>
