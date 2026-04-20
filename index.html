@@ -56,7 +56,7 @@
     };
 
     const main = async () => {
-      const cfg = getConfig();
+      const cfg = getConfig();debug('config loaded', cfg);
       const mediaElement = document.getElementById('measurement');
       if (!mediaElement) return;
 
@@ -80,7 +80,7 @@
         }
       };
 
-      const measurement = await Measurement.init(settings);
+      const measurement = await Measurement.init(settings);debug('measurement init ok');
       const camera = CameraController.init();
       const mask = new AnuraMask({
         shouldFlipHorizontally: true,
@@ -101,7 +101,7 @@
         hypertension: normalizeEnum('hypertension', demographics.hypertension) || faceAttributeValue.HYPERTENSION_FALSE
       };
 
-      await measurement.setDemographics(sdkDemographics);
+      await measurement.setDemographics(sdkDemographics);debug('demographics set ok', sdkDemographics);
 
       measurement.on.faceTrackerStateChanged = async (state) => {
         postToMiniProgram({ type: 'ANURA_STATUS', status: state });
@@ -124,7 +124,7 @@
         postToMiniProgram({ type: 'ANURA_ERROR', category, message, data });
       };
 
-      camera.addEventListener('CAMERA_STATUS', async (e) => {
+      camera.addEventListener('CAMERA_STATUS', async (e) => {debug('camera status event', e && e.detail);
         if (e && e.detail && e.detail.isOpen && camera.cameraStream) {
           await measurement.setMediaStream(camera.cameraStream);
           const ok = measurement.setObjectFit(mask.objectFit);
@@ -134,13 +134,14 @@
         }
       });
 
-      const granted = await camera.requestPermission();
+      const granted = await camera.requestPermission();debug('camera permission result', granted);
       if (!granted) {
         postToMiniProgram({ type: 'ANURA_ERROR', message: 'Camera permission denied' });
         return;
       }
       await camera.list();
-      await camera.start(1280, 720);
+      const started = await camera.start(1280, 720);
+debug('camera.start result', started);
     };
 
     main().catch((err) => {
@@ -155,6 +156,9 @@
     type: 'ANURA_ERROR',
     message: err && err.message ? err.message : 'SDK init failed'
   });
+      const debug = (...args) => {
+  console.log('[ANURA_BRIDGE]', ...args);
+};
 });
   </script>
 </body>
