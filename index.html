@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anura Bridge</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; background: #0b1220; }
+    #measurement { width: 100%; height: 100%; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "@nuralogix.ai/anura-web-core-sdk": "https://unpkg.com/@nuralogix.ai/anura-web-core-sdk",
+        "@nuralogix.ai/anura-web-core-sdk/helpers": "https://unpkg.com/@nuralogix.ai/anura-web-core-sdk/lib/helpers/index.min.mjs",
+        "@nuralogix.ai/anura-web-core-sdk/masks/anura": "https://unpkg.com/@nuralogix.ai/anura-web-core-sdk/lib/masks/anura/index.mjs"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="measurement"></div>
+
+  <script type="module">
+    import {
+      Measurement,
+      faceTrackerState,
+      faceAttributeValue,
+      errorCategories
+    } from '@nuralogix.ai/anura-web-core-sdk';
+    import helpers from '@nuralogix.ai/anura-web-core-sdk/helpers';
+    import { AnuraMask } from '@nuralogix.ai/anura-web-core-sdk/masks/anura';
+
+    const { CameraController } = helpers;
+
+    const getConfig = () => {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get('config');
+      if (!raw) return {};
+      try {
+        return JSON.parse(decodeURIComponent(raw));
+      } catch (e) {
+        return {};
+      }
+    };
+
+    const postToMiniProgram = (payload) => {
+      if (window.wx && window.wx.miniProgram) {
+        window.wx.miniProgram.postMessage({ data: payload });
+      }
+    };
+
+    const normalizeEnum = (key, value) => {
+      if (!value) return undefined;
+      return faceAttributeValue[value];
+    };
+
+    const main = async () => {
+      const cfg = getConfig();
+      const mediaElement = document.getElementById('measurement');
+      if (!mediaElement) return;
+
+      const settings = {
+        mediaElement,
+        assetFolder: 'https://unpkg.com/@nuralogix.ai/anura-web-core-sdk/lib/assets',
+        apiUrl: cfg.apiUrl || 'api.deepaffex.ai',
+        mirrorVideo: true,
+        displayMediaStream: true,
+        metrics: false,
+        constraintOverrides: {
+          minimumFps: 14,
+          boxWidth_pct: 100,
+          boxHeight_pct: 100,
+          checkBackLight: false,
+          checkCentered: true,
+          checkDistance: true,
+          checkFaceDirection: true,
+          checkLighting: false,
+          checkMovement: false
+        }
+      };
+
+      const measurement = await Measurement.init(settings);
+      const camera = CameraController.init();
+      const mask = new AnuraMask({
+        shouldFlipHorizontally: true,
+        diameter: 0.8,
+        topMargin: 0.06,
+        bottomMargin: 0.02
+      });
+
+      const demographics = cfg.demographics || {};
+      const sdkDemographics = {
+        age: demographics.age || 40,
+        height: demographics.height || 170,
+        weight: demographics.weight || 65,
+        sex: normalizeEnum('sex', demographics.sex) || faceAttributeValue.SEX_ASSIGNED_MALE_AT_BIRTH,
+        smoking: normalizeEnum('smoking', demographics.smoking) || faceAttributeValue.SMOKER_FALSE,
+        bloodPressureMedication: normalizeEnum('bloodPressureMedication', demographics.bloodPressureMedication) || faceAttributeValue.BLOOD_PRESSURE_MEDICATION_FALSE,
+        diabetes: normalizeEnum('diabetes', demographics.diabetes) || faceAttributeValue.DIABETES_FALSE,
+        hypertension: normalizeEnum('hypertension', demographics.hypertension) || faceAttributeValue.HYPERTENSION_FALSE
+      };
+
+      await measurement.setDemographics(sdkDemographics);
+
+      measurement.on.faceTrackerStateChanged = async (state) => {
+        postToMiniProgram({ type: 'ANURA_STATUS', status: state });
+        if (state === faceTrackerState.READY) {
+          await measurement.setConstraintsConfig(true);
+          await measurement.startTracking();
+          await measurement.startMeasurement(false);
+        }
+      };
+
+      measurement.on.resultsReceived = (results) => {
+        postToMiniProgram({ type: 'ANURA_RESULTS', results });
+      };
+
+      measurement.on.error = (category, data) => {
+        let message = 'Unknown error';
+        if (category === errorCategories.WEB_SOCKET && data && data.reason) {
+          message = data.reason;
+        }
+        postToMiniProgram({ type: 'ANURA_ERROR', category, message, data });
+      };
+
+      camera.addEventListener('CAMERA_STATUS', async (e) => {
+        if (e && e.detail && e.detail.isOpen && camera.cameraStream) {
+          await measurement.setMediaStream(camera.cameraStream);
+          const ok = measurement.setObjectFit(mask.objectFit);
+          if (ok) {
+            measurement.loadMask(mask.getSvg());
+          }
+        }
+      });
+
+      const granted = await camera.requestPermission();
+      if (!granted) {
+        postToMiniProgram({ type: 'ANURA_ERROR', message: 'Camera permission denied' });
+        return;
+      }
+      await camera.list();
+      await camera.start(1280, 720);
+    };
+
+    main().catch((err) => {
+      postToMiniProgram({ type: 'ANURA_ERROR', message: err && err.message ? err.message : 'SDK init failed' });
+    });
+  </script>
+</body>
+</html>
