@@ -51,19 +51,29 @@
       }
     };
 
-    const debug = (...args) => {
-  console.log('[ANURA_BRIDGE]', ...args);
-};
+        const debug = (...args) => {
+      console.log('[ANURA_BRIDGE]', ...args);
+    };
 
     const normalizeEnum = (key, value) => {
       if (!value) return undefined;
       return faceAttributeValue[value];
     };
 
+    const fetchJson = async (url) => {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+      }
+      return response.json();
+    };
+
     const main = async () => {
-      const cfg = getConfig();debug('config loaded', cfg);
+      const cfg = getConfig();
+      debug('config loaded', cfg);
       const mediaElement = document.getElementById('measurement');
       if (!mediaElement) return;
+      const tokenServerUrl = (cfg.tokenServerUrl || 'http://localhost:3000').replace(/\/$/, '');
 
       const settings = {
         mediaElement,
@@ -85,7 +95,8 @@
         }
       };
 
-      const measurement = await Measurement.init(settings);debug('measurement init ok');
+      const measurement = await Measurement.init(settings);
+      debug('measurement init ok');
       const camera = CameraController.init();
       const mask = new AnuraMask({
         shouldFlipHorizontally: true,
@@ -107,7 +118,35 @@
         hypertension: normalizeEnum('hypertension', demographics.hypertension) || faceAttributeValue.HYPERTENSION_FALSE
       };
 
-      await measurement.setDemographics(sdkDemographics);debug('demographics set ok', sdkDemographics);
+      await measurement.setDemographics(sdkDemographics);
+      debug('demographics set ok', sdkDemographics);
+
+      const studyIdResponse = await fetchJson(`${tokenServerUrl}/api/studyId`);
+      debug('studyId response', studyIdResponse);
+      const tokenResponse = await fetchJson(`${tokenServerUrl}/api/token`);
+      debug('token response status', tokenResponse && tokenResponse.status);
+
+      if (studyIdResponse.status !== '200' || tokenResponse.status !== '200') {
+        throw new Error('Failed to get Study ID or token from token server');
+      }
+
+      const prepareSuccess = await measurement.prepare(
+        tokenResponse.token,
+        tokenResponse.refreshToken,
+        studyIdResponse.studyId
+      );
+      debug('measurement.prepare result', prepareSuccess);
+
+      if (!prepareSuccess) {
+        throw new Error('measurement.prepare failed');
+      }
+
+      const downloadSuccess = await measurement.downloadAssets();
+      debug('measurement.downloadAssets result', downloadSuccess);
+
+      if (!downloadSuccess) {
+        throw new Error('measurement.downloadAssets failed');
+      }
 
       measurement.on.faceTrackerStateChanged = async (state) => {
   debug('faceTrackerState', state);
@@ -151,8 +190,8 @@
       };
 
       camera.addEventListener(CAMERA_STATUS, async (e) => {
-  debug('camera status event', e && e.detail);
-  debug('camera stream exists', !!camera.cameraStream);
+        debug('camera status event', e && e.detail);
+        debug('camera stream exists', !!camera.cameraStream);
 
   if (e && e.detail && e.detail.isOpen && camera.cameraStream) {
     debug('before setMediaStream');
@@ -169,7 +208,7 @@
   }
 });
 
-      const granted = await camera.requestPermission();debug('camera permission result', granted);
+      const granted = await camera.requestPermission();      debug('camera permission result', granted);
       if (!granted) {
         postToMiniProgram({ type: 'ANURA_ERROR', message: 'Camera permission denied' });
         return;
